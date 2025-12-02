@@ -141,7 +141,7 @@ services:
 
   # ---------- Spark ----------
   spark-master:
-    image: bitnami/spark:3.4.2
+    image: bitnami/spark:latest
     container_name: spark-master
     env_file:
       - ./hadoop.env
@@ -155,7 +155,7 @@ services:
       - hadoop
 
   spark-worker1:
-    image: bitnami/spark:3.4.2
+    image: bitnami/spark:latest
     container_name: spark-worker1
     depends_on:
       - spark-master
@@ -169,7 +169,7 @@ services:
       - hadoop
 
   spark-worker2:
-    image: bitnami/spark:3.4.2
+    image: bitnami/spark:latest
     container_name: spark-worker2
     depends_on:
       - spark-master
