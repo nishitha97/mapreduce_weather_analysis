@@ -1,110 +1,90 @@
-version: "3.8"
-
 services:
   namenode:
-    image: uhopper/hadoop-namenode:3.3.4
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
     container_name: namenode
-    environment:
-      - CLUSTER_NAME=test
+    restart: always
     ports:
       - "9870:9870"
       - "9000:9000"
     volumes:
       - hadoop_namenode:/hadoop/dfs/name
+    env_file:
+      - ./hadoop.env
+    environment:
+      - CLUSTER_NAME=test
     networks:
       - hadoop
 
   datanode1:
-    image: uhopper/hadoop-datanode:3.3.4
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
     container_name: datanode1
+    restart: always
     depends_on:
       - namenode
-    environment:
-      - NAMENODE_URI=hdfs://namenode:9000
-    ports:
-      - "9864:9864"
     volumes:
       - hadoop_datanode1:/hadoop/dfs/data
+    env_file:
+      - ./hadoop.env
+    environment:
+      SERVICE_PRECONDITION: "namenode:9870"
     networks:
       - hadoop
 
   datanode2:
-    image: uhopper/hadoop-datanode:3.3.4
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
     container_name: datanode2
+    restart: always
     depends_on:
       - namenode
-    environment:
-      - NAMENODE_URI=hdfs://namenode:9000
-    ports:
-      - "9865:9864"
     volumes:
       - hadoop_datanode2:/hadoop/dfs/data
+    env_file:
+      - ./hadoop.env
+    environment:
+      SERVICE_PRECONDITION: "namenode:9870"
     networks:
       - hadoop
 
   resourcemanager:
-    image: uhopper/hadoop-resourcemanager:3.3.4
+    image: bde2020/hadoop-resourcemanager:2.0.0-hadoop3.2.1-java8
     container_name: resourcemanager
+    restart: always
     depends_on:
       - namenode
       - datanode1
       - datanode2
     ports:
       - "8088:8088"
+    env_file:
+      - ./hadoop.env
     environment:
-      - NAMENODE_URI=hdfs://namenode:9000
+      SERVICE_PRECONDITION: "namenode:9000 namenode:9870 datanode1:9864 datanode2:9864"
     networks:
       - hadoop
 
   nodemanager1:
-    image: uhopper/hadoop-nodemanager:3.3.4
+    image: bde2020/hadoop-nodemanager:2.0.0-hadoop3.2.1-java8
     container_name: nodemanager1
+    restart: always
     depends_on:
       - resourcemanager
+    env_file:
+      - ./hadoop.env
     environment:
-      - RESOURCEMANAGER_URI=resourcemanager:8088
+      SERVICE_PRECONDITION: "resourcemanager:8088"
     networks:
       - hadoop
 
   nodemanager2:
-    image: uhopper/hadoop-nodemanager:3.3.4
+    image: bde2020/hadoop-nodemanager:2.0.0-hadoop3.2.1-java8
     container_name: nodemanager2
+    restart: always
     depends_on:
       - resourcemanager
+    env_file:
+      - ./hadoop.env
     environment:
-      - RESOURCEMANAGER_URI=resourcemanager:8088
-    networks:
-      - hadoop
-
-  spark-master:
-    image: uhopper/spark-master:3.3.2
-    container_name: spark-master
-    ports:
-      - "7077:7077"
-      - "8080:8080"
-    environment:
-      - SPARK_MODE=master
-      - HADOOP_CONF_DIR=/opt/hadoop/etc/hadoop
-    networks:
-      - hadoop
-
-  spark-worker1:
-    image: uhopper/spark-worker:3.3.2
-    container_name: spark-worker1
-    depends_on:
-      - spark-master
-    environment:
-      - SPARK_MASTER=spark://spark-master:7077
-    networks:
-      - hadoop
-
-  spark-worker2:
-    image: uhopper/spark-worker:3.3.2
-    container_name: spark-worker2
-    depends_on:
-      - spark-master
-    environment:
-      - SPARK_MASTER=spark://spark-master:7077
+      SERVICE_PRECONDITION: "resourcemanager:8088"
     networks:
       - hadoop
 
@@ -122,8 +102,9 @@ services:
       - hadoop
 
   hive-metastore:
-    image: uhopper/hive-metastore:3.1.2
+    image: bde2020/hive:2.3.2-postgresql-metastore
     container_name: hive-metastore
+    restart: always
     depends_on:
       - hive-metastore-db
       - namenode
@@ -138,14 +119,17 @@ services:
       - hadoop
 
   hive-server:
-    image: uhopper/hive-server:3.1.2
+    image: bde2020/hive:2.3.2-postgresql-metastore
     container_name: hive-server
+    restart: always
     depends_on:
       - hive-metastore
       - namenode
+      - datanode1
+      - datanode2
     environment:
       HIVE_METASTORE_URI: thrift://hive-metastore:9083
-      HIVE_EXECUTION_ENGINE: spark
+      HIVE_EXECUTION_ENGINE: mr
     ports:
       - "10000:10000"
     networks:
