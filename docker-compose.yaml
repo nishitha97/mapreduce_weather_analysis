@@ -1,0 +1,193 @@
+version: "3.8"
+
+services:
+  # ---------- Hadoop Cluster ----------
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: namenode
+    restart: always
+    ports:
+      - "9870:9870"
+      - "9000:9000"
+    volumes:
+      - hadoop_namenode:/hadoop/dfs/name
+    env_file:
+      - ./hadoop.env
+    networks:
+      - hadoop
+
+  datanode1:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: datanode1
+    restart: always
+    depends_on:
+      - namenode
+    volumes:
+      - hadoop_datanode1:/hadoop/dfs/data
+    environment:
+      SERVICE_PRECONDITION: "namenode:9870"
+    env_file:
+      - ./hadoop.env
+    networks:
+      - hadoop
+
+  datanode2:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: datanode2
+    restart: always
+    depends_on:
+      - namenode
+    volumes:
+      - hadoop_datanode2:/hadoop/dfs/data
+    environment:
+      SERVICE_PRECONDITION: "namenode:9870"
+    env_file:
+      - ./hadoop.env
+    networks:
+      - hadoop
+
+  resourcemanager:
+    image: bde2020/hadoop-resourcemanager:2.0.0-hadoop3.2.1-java8
+    container_name: resourcemanager
+    restart: always
+    depends_on:
+      - namenode
+      - datanode1
+      - datanode2
+    ports:
+      - "8088:8088"
+    environment:
+      SERVICE_PRECONDITION: "namenode:9000 namenode:9870 datanode1:9864 datanode2:9864"
+    env_file:
+      - ./hadoop.env
+    networks:
+      - hadoop
+
+  nodemanager1:
+    image: bde2020/hadoop-nodemanager:2.0.0-hadoop3.2.1-java8
+    container_name: nodemanager1
+    restart: always
+    depends_on:
+      - resourcemanager
+    environment:
+      SERVICE_PRECONDITION: "resourcemanager:8088"
+    env_file:
+      - ./hadoop.env
+    networks:
+      - hadoop
+
+  nodemanager2:
+    image: bde2020/hadoop-nodemanager:2.0.0-hadoop3.2.1-java8
+    container_name: nodemanager2
+    restart: always
+    depends_on:
+      - resourcemanager
+    environment:
+      SERVICE_PRECONDITION: "resourcemanager:8088"
+    env_file:
+      - ./hadoop.env
+    networks:
+      - hadoop
+
+  # ---------- Hive ----------
+  hive-metastore-db:
+    image: postgres:13
+    container_name: hive-metastore-db
+    restart: always
+    environment:
+      POSTGRES_USER: hive
+      POSTGRES_PASSWORD: hive
+      POSTGRES_DB: metastore
+    ports:
+      - "5432:5432"
+    networks:
+      - hadoop
+
+  hive-metastore:
+    image: bde2020/hive:2.3.2-postgresql-metastore
+    container_name: hive-metastore
+    restart: always
+    depends_on:
+      - hive-metastore-db
+      - namenode
+    env_file:
+      - ./hadoop.env
+    environment:
+      HIVE_METASTORE_DB_HOSTNAME: hive-metastore-db
+      HIVE_METASTORE_DB_NAME: metastore
+      HIVE_METASTORE_DB_USERNAME: hive
+      HIVE_METASTORE_DB_PASSWORD: hive
+    ports:
+      - "9083:9083"
+    networks:
+      - hadoop
+
+  hive-server:
+    image: bde2020/hive:2.3.2-postgresql-metastore
+    container_name: hive-server
+    restart: always
+    depends_on:
+      - hive-metastore
+      - namenode
+      - datanode1
+      - datanode2
+    env_file:
+      - ./hadoop.env
+    environment:
+      HIVE_METASTORE_URI: thrift://hive-metastore:9083
+      HIVE_EXECUTION_ENGINE: spark
+    ports:
+      - "10000:10000"
+    networks:
+      - hadoop
+
+  # ---------- Spark ----------
+  spark-master:
+    image: bitnami/spark:3
+    container_name: spark-master
+    env_file:
+      - ./hadoop.env
+    environment:
+      - SPARK_MODE=master
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+    ports:
+      - "7077:7077"
+      - "8081:8080"  # Spark Master Web UI
+    networks:
+      - hadoop
+
+  spark-worker1:
+    image: bitnami/spark:3
+    container_name: spark-worker1
+    depends_on:
+      - spark-master
+    env_file:
+      - ./hadoop.env
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_WORKER_MEMORY=1G
+    networks:
+      - hadoop
+
+  spark-worker2:
+    image: bitnami/spark:3
+    container_name: spark-worker2
+    depends_on:
+      - spark-master
+    env_file:
+      - ./hadoop.env
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_WORKER_MEMORY=1G
+    networks:
+      - hadoop
+
+volumes:
+  hadoop_namenode:
+  hadoop_datanode1:
+  hadoop_datanode2:
+
+networks:
+  hadoop:
