@@ -5,8 +5,8 @@ services:
     container_name: namenode
     restart: always
     ports:
-      - "9870:9870"   # HDFS UI
-      - "9000:9000"   # HDFS RPC
+      - "9870:9870"
+      - "9000:9000"
     volumes:
       - hadoop_namenode:/hadoop/dfs/name
     env_file:
@@ -14,9 +14,9 @@ services:
     networks:
       - hadoop
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9870/"]
+      test: ["CMD","curl","-f","http://localhost:9870/"]
       interval: 30s
-      retries: 10
+      retries: 5
 
   datanode1:
     image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
@@ -58,7 +58,7 @@ services:
       datanode2:
         condition: service_healthy
     ports:
-      - "8088:8088"  # YARN UI
+      - "8088:8088"
     env_file:
       - ./hadoop.env
     networks:
@@ -146,49 +146,48 @@ services:
     networks:
       - hadoop
 
-  # ---------- Apache Spark ----------
+  # ---------- Spark (Standalone using BDE images) ----------
   spark-master:
-    image: bde2020/spark-master:3.3.1-hadoop3.2
+    image: bde2020/spark-master:3.2.1-hadoop3.2
     container_name: spark-master
+    restart: always
     environment:
-      - SPARK_MODE=master
-      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - INIT_DAEMON_STEP=setup_spark
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:9000
     ports:
       - "7077:7077"
-      - "8081:8080"
-    networks:
-      - hadoop
+      - "8081:8080"   # Spark Master UI
     depends_on:
       namenode:
         condition: service_healthy
-      resourcemanager:
-        condition: service_healthy
+    networks:
+      - hadoop
 
   spark-worker1:
-    image: bde2020/spark-worker:3.3.1-hadoop3.2
+    image: bde2020/spark-worker:3.2.1-hadoop3.2
     container_name: spark-worker1
+    restart: always
     environment:
-      - SPARK_MODE=worker
       - SPARK_MASTER=spark://spark-master:7077
-      - SPARK_WORKER_MEMORY=1G
-    networks:
-      - hadoop
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:9000
     depends_on:
       spark-master:
         condition: service_healthy
+    networks:
+      - hadoop
 
   spark-worker2:
-    image: bde2020/spark-worker:3.3.1-hadoop3.2
+    image: bde2020/spark-worker:3.2.1-hadoop3.2
     container_name: spark-worker2
+    restart: always
     environment:
-      - SPARK_MODE=worker
       - SPARK_MASTER=spark://spark-master:7077
-      - SPARK_WORKER_MEMORY=1G
-    networks:
-      - hadoop
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:9000
     depends_on:
       spark-master:
         condition: service_healthy
+    networks:
+      - hadoop
 
 volumes:
   hadoop_namenode:
