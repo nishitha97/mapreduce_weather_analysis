@@ -1,147 +1,139 @@
-version: "3.8"
+version: '3.8'
 
 services:
-
+  # -----------------------------
+  # HDFS - NameNode (Hadoop 2.7.4)
+  # -----------------------------
   namenode:
-    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    image: ramilu90/hive-namenode:1.0.0
     container_name: namenode
     restart: always
+    env_file:
+      - ./hadoop.env
+    environment:
+      - CLUSTER_NAME=hadoop-cluster
+      - HDFS_NAMENODE_RPC_ADDRESS=namenode:8020
+#    volumes:
+#     - /home/iitgcpuser/iit/lab5/hadoop-hive-dockercompose/recharge2.input:/opt/recharge2.input
+      - ./data_new/namenode:/hadoop/dfs/name
     ports:
-      - "9870:9870"
-      - "9000:9000"
+      - "50070:50070"
+      - "8020:8020"
+    networks:
+      - hadoop-net
+    healthcheck:
+      test: [ "CMD", "hdfs", "dfsadmin", "-report" ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  # -----------------------------
+  # HDFS - DataNode (Hadoop 2.7.4)
+  # -----------------------------
+  datanode:
+    image: ramilu90/hive-datanode:1.0.0
+    container_name: datanode
+    restart: always
+    env_file:
+      - ./hadoop.env
+    environment:
+      - SERVICE_PRECONDITION=namenode:8020
+      - HDFS_NAMENODE_RPC_ADDRESS=namenode:8020
     volumes:
-      - ./data/namenode:/hadoop/dfs/name
-      - ./init/hdfs-init.sh:/docker-entrypoint-initdb.d/hdfs-init.sh
-    environment:
-      - CLUSTER_NAME=test
-    env_file:
-      - ./hadoop.env
-    networks:
-      - hadoop
-
-  datanode1:
-    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
-    container_name: datanode1
-    restart: always
+      - ./data_new/datanode:/hadoop/dfs/data
     depends_on:
-      - namenode
-    volumes:
-      - ./data/datanode1:/hadoop/dfs/data
-    environment:
-      SERVICE_PRECONDITION: "namenode:9870"
-    env_file:
-      - ./hadoop.env
+      namenode:
+        condition: service_healthy
     networks:
-      - hadoop
+      - hadoop-net
 
-  datanode2:
-    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
-    container_name: datanode2
-    restart: always
-    depends_on:
-      - namenode
-    volumes:
-      - ./data/datanode2:/hadoop/dfs/data
-    environment:
-      SERVICE_PRECONDITION: "namenode:9870"
-    env_file:
-      - ./hadoop.env
-    networks:
-      - hadoop
-
-  resourcemanager:
-    image: bde2020/hadoop-resourcemanager:2.0.0-hadoop3.2.1-java8
-    container_name: resourcemanager
-    restart: always
-    depends_on:
-      - namenode
-      - datanode1
-      - datanode2
-    ports:
-      - "8088:8088"
-    environment:
-      SERVICE_PRECONDITION: "namenode:9000 namenode:9870 datanode1:9864 datanode2:9864"
-    env_file:
-      - ./hadoop.env
-    networks:
-      - hadoop
-
-  nodemanager1:
-    image: bde2020/hadoop-nodemanager:2.0.0-hadoop3.2.1-java8
-    container_name: nodemanager1
-    restart: always
-    depends_on:
-      - resourcemanager
-    environment:
-      SERVICE_PRECONDITION: "resourcemanager:8088"
-    env_file:
-      - ./hadoop.env
-    networks:
-      - hadoop
-
-  nodemanager2:
-    image: bde2020/hadoop-nodemanager:2.0.0-hadoop3.2.1-java8
-    container_name: nodemanager2
-    restart: always
-    depends_on:
-      - resourcemanager
-    environment:
-      SERVICE_PRECONDITION: "resourcemanager:8088"
-    env_file:
-      - ./hadoop.env
-    networks:
-      - hadoop
-
-  hive-metastore-db:
-    image: postgres:13
-    container_name: hive-metastore-db
+  # -----------------------------
+  # PostgreSQL for Hive Metastore
+  # -----------------------------
+  hive-metastore-postgresql:
+    image: ramilu90/hive-metastore-postgresql:1.0.0
+    container_name: hive-metastore-postgresql
     restart: always
     environment:
       POSTGRES_USER: hive
       POSTGRES_PASSWORD: hive
       POSTGRES_DB: metastore
+    volumes:
+      - metastore-db2:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     networks:
-      - hadoop
+      - hadoop-net
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U hive" ]
+      interval: 5s
+      retries: 20
+      timeout: 5s
+
+  # -----------------------------
+  # Hive Metastore Schema Initialization
+  # -----------------------------
+  hive-metastore-init:
+    image: ramilu90/hive-metastore-init:1.0.0
+    container_name: hive-metastore-init
+    env_file:
+      - ./hadoop.env
+    depends_on:
+      hive-metastore-postgresql:
+        condition: service_healthy
+      namenode:
+        condition: service_healthy
+    command: [ "schematool", "-dbType", "postgres", "-initSchema", "-verbose" ]
+    networks:
+      - hadoop-net
+
 
   hive-metastore:
-    image: bde2020/hive:2.3.2-postgresql-metastore
+    image: ramilu90/hive-metastore:1.0.0
     container_name: hive-metastore
-    restart: always
+    env_file:
+      - ./hadoop.env
+    environment: # Added for HDFS client stability
+      - HADOOP_USER_NAME=root
     depends_on:
-      - hive-metastore-db
-      - namenode
-    environment:
-      HIVE_METASTORE_DB_HOSTNAME: hive-metastore-db
-      HIVE_METASTORE_DB_NAME: metastore
-      HIVE_METASTORE_DB_USERNAME: hive
-      HIVE_METASTORE_DB_PASSWORD: hive
-    volumes:
-      - ./hive/conf/hive-site.xml:/opt/hive/conf/hive-site.xml
+      hive-metastore-init:
+        condition: service_completed_successfully
+      namenode:
+        condition: service_healthy
+    command: /opt/hive/bin/hive --service metastore # <-- Simplified command
     ports:
       - "9083:9083"
     networks:
-      - hadoop
+      - hadoop-net
 
-  hive-server:
-    image: bde2020/hive:2.3.2-postgresql-metastore
+
+  # -----------------------------
+  # HiveServer2
+  # -----------------------------
+  hive-server: #
+    image: ramilu90/hive-server:1.0.0
     container_name: hive-server
-    restart: always
+    platform: linux/amd64
+#   volumes:
+#     - /home/iitgcpuser/iit/lab5/hadoop-hive-dockercompose/recharge2.input:/opt/recharge2.input
+    env_file:
+      - ./hadoop.env
+    environment: # Added for HDFS client stability
+      - HADOOP_USER_NAME=root
     depends_on:
-      - hive-metastore
-      - namenode
-      - datanode1
-      - datanode2
-    environment:
-      HIVE_METASTORE_URI: thrift://hive-metastore:9083
-      HIVE_EXECUTION_ENGINE: mr
-    volumes:
-      - ./hive/conf/hive-site.xml:/opt/hive/conf/hive-site.xml
+      hive-metastore:
+        condition: service_started
+      namenode:
+        condition: service_healthy
+    command: /opt/hive/bin/hiveserver2
     ports:
       - "10000:10000"
     networks:
-      - hadoop
+      - hadoop-net
+
+volumes:
+  metastore-db2:
 
 networks:
-  hadoop:
+  hadoop-net:
+    driver: bridge
