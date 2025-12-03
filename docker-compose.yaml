@@ -1,4 +1,9 @@
+version: "3.8"
+
 services:
+  # -------------------------------------------------
+  # HDFS - NameNode
+  # -------------------------------------------------
   namenode:
     image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
     container_name: namenode
@@ -11,10 +16,13 @@ services:
     env_file:
       - ./hadoop.env
     environment:
-      - CLUSTER_NAME=test
+      CLUSTER_NAME: test
     networks:
       - hadoop
 
+  # -------------------------------------------------
+  # HDFS - DataNode 1
+  # -------------------------------------------------
   datanode1:
     image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
     container_name: datanode1
@@ -30,6 +38,9 @@ services:
     networks:
       - hadoop
 
+  # -------------------------------------------------
+  # HDFS - DataNode 2
+  # -------------------------------------------------
   datanode2:
     image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
     container_name: datanode2
@@ -45,6 +56,9 @@ services:
     networks:
       - hadoop
 
+  # -------------------------------------------------
+  # YARN - ResourceManager
+  # -------------------------------------------------
   resourcemanager:
     image: bde2020/hadoop-resourcemanager:2.0.0-hadoop3.2.1-java8
     container_name: resourcemanager
@@ -62,6 +76,9 @@ services:
     networks:
       - hadoop
 
+  # -------------------------------------------------
+  # YARN - NodeManager 1
+  # -------------------------------------------------
   nodemanager1:
     image: bde2020/hadoop-nodemanager:2.0.0-hadoop3.2.1-java8
     container_name: nodemanager1
@@ -75,6 +92,9 @@ services:
     networks:
       - hadoop
 
+  # -------------------------------------------------
+  # YARN - NodeManager 2
+  # -------------------------------------------------
   nodemanager2:
     image: bde2020/hadoop-nodemanager:2.0.0-hadoop3.2.1-java8
     container_name: nodemanager2
@@ -88,6 +108,9 @@ services:
     networks:
       - hadoop
 
+  # -------------------------------------------------
+  # Hive Metastore PostgreSQL
+  # -------------------------------------------------
   hive-metastore-db:
     image: postgres:13
     container_name: hive-metastore-db
@@ -101,6 +124,9 @@ services:
     networks:
       - hadoop
 
+  # -------------------------------------------------
+  # Hive Metastore Service
+  # -------------------------------------------------
   hive-metastore:
     image: bde2020/hive:2.3.2-postgresql-metastore
     container_name: hive-metastore
@@ -118,15 +144,15 @@ services:
     networks:
       - hadoop
 
+  # -------------------------------------------------
+  # Hive Server2 (JDBC)
+  # -------------------------------------------------
   hive-server:
     image: bde2020/hive:2.3.2-postgresql-metastore
     container_name: hive-server
     restart: always
     depends_on:
       - hive-metastore
-      - namenode
-      - datanode1
-      - datanode2
     environment:
       HIVE_METASTORE_URI: thrift://hive-metastore:9083
       HIVE_EXECUTION_ENGINE: mr
@@ -135,6 +161,54 @@ services:
     networks:
       - hadoop
 
+  # -------------------------------------------------
+  # Spark Master
+  # -------------------------------------------------
+  spark:
+    image: bde2020/spark-master:3.2.0-hadoop3.2
+    container_name: spark
+    restart: always
+    depends_on:
+      - namenode
+      - resourcemanager
+    ports:
+      - "7077:7077"
+      - "8080:8080"
+      - "4040:4040"
+    environment:
+      INIT_DAEMON_STEP: setup_spark
+      SPARK_EVENTLOG_ENABLED: "true"
+      SPARK_EVENTLOG_DIR: /spark-events
+    volumes:
+      - ./spark-events:/spark-events
+    networks:
+      - hadoop
+
+  # -------------------------------------------------
+  # Spark Worker
+  # -------------------------------------------------
+  spark-worker:
+    image: bde2020/spark-worker:3.2.0-hadoop3.2
+    container_name: spark-worker
+    restart: always
+    depends_on:
+      - spark
+    environment:
+      SPARK_MASTER_URL: spark://spark:7077
+      SPARK_WORKER_CORES: 2
+      SPARK_WORKER_MEMORY: 2G
+      SPARK_EVENTLOG_ENABLED: "true"
+      SPARK_EVENTLOG_DIR: /spark-events
+    volumes:
+      - ./spark-events:/spark-events
+    ports:
+      - "8081:8081"
+    networks:
+      - hadoop
+
+# -----------------------------------------------------
+# Volumes & Networks
+# -----------------------------------------------------
 volumes:
   hadoop_namenode:
   hadoop_datanode1:
