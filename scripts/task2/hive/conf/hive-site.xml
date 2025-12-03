@@ -1,8 +1,5 @@
 <?xml version="1.0"?>
-<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
-
 <configuration>
-
     <!-- Metastore DB settings -->
     <property>
         <name>javax.jdo.option.ConnectionURL</name>
@@ -25,7 +22,7 @@
         <value>hive</value>
     </property>
 
-    <!-- Required warehouse directory -->
+    <!-- Warehouse directory -->
     <property>
         <name>hive.metastore.warehouse.dir</name>
         <value>/user/hive/warehouse</value>

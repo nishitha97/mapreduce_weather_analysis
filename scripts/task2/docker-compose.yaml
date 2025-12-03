@@ -1,7 +1,6 @@
 version: "3.8"
 
 services:
-
   namenode:
     image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
     container_name: namenode
@@ -11,13 +10,15 @@ services:
       - "9000:9000"
     volumes:
       - ./data/namenode:/hadoop/dfs/name
-      - ./init/hdfs-init.sh:/docker-entrypoint-initdb.d/hdfs-init.sh
+      - ./init/hdfs-init.sh:/opt/hadoop-init/hdfs-init.sh:ro
     environment:
       - CLUSTER_NAME=test
     env_file:
       - ./hadoop.env
     networks:
       - hadoop
+    # Start run.sh (container entrypoint) in background, then wait for HDFS and run init script
+    command: ["/bin/bash", "-c", "\/run.sh &\nfor i in {1..60}; do if /usr/local/hadoop/bin/hdfs dfs -ls / >/dev/null 2>&1; then break; fi; sleep 1; done; chmod +x /opt/hadoop-init/hdfs-init.sh || true; /opt/hadoop-init/hdfs-init.sh || true; wait"]
 
   datanode1:
     image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
@@ -118,7 +119,7 @@ services:
       HIVE_METASTORE_DB_USERNAME: hive
       HIVE_METASTORE_DB_PASSWORD: hive
     volumes:
-      - ./hive/conf/hive-site.xml:/opt/hive/conf/hive-site.xml
+      - ./hive/conf/hive-site.xml:/opt/hive/conf/hive-site.xml:ro
     ports:
       - "9083:9083"
     networks:
@@ -137,11 +138,15 @@ services:
       HIVE_METASTORE_URI: thrift://hive-metastore:9083
       HIVE_EXECUTION_ENGINE: mr
     volumes:
-      - ./hive/conf/hive-site.xml:/opt/hive/conf/hive-site.xml
+      - ./hive/conf/hive-site.xml:/opt/hive/conf/hive-site.xml:ro
     ports:
       - "10000:10000"
     networks:
       - hadoop
 
+volumes:
+# optional named volumes (we are using host folders above)
+
 networks:
   hadoop:
+    driver: bridge
