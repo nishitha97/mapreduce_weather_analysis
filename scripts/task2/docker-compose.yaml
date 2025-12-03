@@ -1,98 +1,6 @@
 version: "3.8"
 
 services:
-  namenode:
-    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
-    container_name: namenode
-    restart: always
-    ports:
-      - "9870:9870"
-      - "9000:9000"
-    volumes:
-      - ./data/namenode:/hadoop/dfs/name
-      - ./init/hdfs-init.sh:/opt/hadoop-init/hdfs-init.sh:ro
-    environment:
-      - CLUSTER_NAME=test
-    env_file:
-      - ./hadoop.env
-    networks:
-      - hadoop
-    # Start run.sh (container entrypoint) in background, then wait for HDFS and run init script
-    command: ["/bin/bash", "-c", "\/run.sh &\nfor i in {1..60}; do if /usr/local/hadoop/bin/hdfs dfs -ls / >/dev/null 2>&1; then break; fi; sleep 1; done; chmod +x /opt/hadoop-init/hdfs-init.sh || true; /opt/hadoop-init/hdfs-init.sh || true; wait"]
-
-  datanode1:
-    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
-    container_name: datanode1
-    restart: always
-    depends_on:
-      - namenode
-    volumes:
-      - ./data/datanode1:/hadoop/dfs/data
-    environment:
-      SERVICE_PRECONDITION: "namenode:9870"
-    env_file:
-      - ./hadoop.env
-    networks:
-      - hadoop
-
-  datanode2:
-    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
-    container_name: datanode2
-    restart: always
-    depends_on:
-      - namenode
-    volumes:
-      - ./data/datanode2:/hadoop/dfs/data
-    environment:
-      SERVICE_PRECONDITION: "namenode:9870"
-    env_file:
-      - ./hadoop.env
-    networks:
-      - hadoop
-
-  resourcemanager:
-    image: bde2020/hadoop-resourcemanager:2.0.0-hadoop3.2.1-java8
-    container_name: resourcemanager
-    restart: always
-    depends_on:
-      - namenode
-      - datanode1
-      - datanode2
-    ports:
-      - "8088:8088"
-    environment:
-      SERVICE_PRECONDITION: "namenode:9000 namenode:9870 datanode1:9864 datanode2:9864"
-    env_file:
-      - ./hadoop.env
-    networks:
-      - hadoop
-
-  nodemanager1:
-    image: bde2020/hadoop-nodemanager:2.0.0-hadoop3.2.1-java8
-    container_name: nodemanager1
-    restart: always
-    depends_on:
-      - resourcemanager
-    environment:
-      SERVICE_PRECONDITION: "resourcemanager:8088"
-    env_file:
-      - ./hadoop.env
-    networks:
-      - hadoop
-
-  nodemanager2:
-    image: bde2020/hadoop-nodemanager:2.0.0-hadoop3.2.1-java8
-    container_name: nodemanager2
-    restart: always
-    depends_on:
-      - resourcemanager
-    environment:
-      SERVICE_PRECONDITION: "resourcemanager:8088"
-    env_file:
-      - ./hadoop.env
-    networks:
-      - hadoop
-
   hive-metastore-db:
     image: postgres:13
     container_name: hive-metastore-db
@@ -145,7 +53,7 @@ services:
       - hadoop
 
 volumes:
-# optional named volumes (we are using host folders above)
+# optional named volumes
 
 networks:
   hadoop:
