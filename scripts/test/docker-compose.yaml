@@ -1,0 +1,139 @@
+version: '3.8'
+
+services:
+  # -----------------------------
+  # HDFS - NameNode (Hadoop 2.7.4)
+  # -----------------------------
+  namenode:
+    image: ramilu90/hive-namenode:1.0.0
+    container_name: namenode
+    restart: always
+    env_file:
+      - ./hadoop.env
+    environment:
+      - CLUSTER_NAME=hadoop-cluster
+      - HDFS_NAMENODE_RPC_ADDRESS=namenode:8020
+#    volumes:
+#     - /home/iitgcpuser/iit/lab5/hadoop-hive-dockercompose/recharge2.input:/opt/recharge2.input
+      - ./data_new/namenode:/hadoop/dfs/name
+    ports:
+      - "50070:50070"
+      - "8020:8020"
+    networks:
+      - hadoop-net
+    healthcheck:
+      test: [ "CMD", "hdfs", "dfsadmin", "-report" ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  # -----------------------------
+  # HDFS - DataNode (Hadoop 2.7.4)
+  # -----------------------------
+  datanode:
+    image: ramilu90/hive-datanode:1.0.0
+    container_name: datanode
+    restart: always
+    env_file:
+      - ./hadoop.env
+    environment:
+      - SERVICE_PRECONDITION=namenode:8020
+      - HDFS_NAMENODE_RPC_ADDRESS=namenode:8020
+    volumes:
+      - ./data_new/datanode:/hadoop/dfs/data
+    depends_on:
+      namenode:
+        condition: service_healthy
+    networks:
+      - hadoop-net
+
+  # -----------------------------
+  # PostgreSQL for Hive Metastore
+  # -----------------------------
+  hive-metastore-postgresql:
+    image: ramilu90/hive-metastore-postgresql:1.0.0
+    container_name: hive-metastore-postgresql
+    restart: always
+    environment:
+      POSTGRES_USER: hive
+      POSTGRES_PASSWORD: hive
+      POSTGRES_DB: metastore
+    volumes:
+      - metastore-db2:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - hadoop-net
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U hive" ]
+      interval: 5s
+      retries: 20
+      timeout: 5s
+
+  # -----------------------------
+  # Hive Metastore Schema Initialization
+  # -----------------------------
+  hive-metastore-init:
+    image: ramilu90/hive-metastore-init:1.0.0
+    container_name: hive-metastore-init
+    env_file:
+      - ./hadoop.env
+    depends_on:
+      hive-metastore-postgresql:
+        condition: service_healthy
+      namenode:
+        condition: service_healthy
+    command: [ "schematool", "-dbType", "postgres", "-initSchema", "-verbose" ]
+    networks:
+      - hadoop-net
+
+
+  hive-metastore:
+    image: ramilu90/hive-metastore:1.0.0
+    container_name: hive-metastore
+    env_file:
+      - ./hadoop.env
+    environment: # Added for HDFS client stability
+      - HADOOP_USER_NAME=root
+    depends_on:
+      hive-metastore-init:
+        condition: service_completed_successfully
+      namenode:
+        condition: service_healthy
+    command: /opt/hive/bin/hive --service metastore # <-- Simplified command
+    ports:
+      - "9083:9083"
+    networks:
+      - hadoop-net
+
+
+  # -----------------------------
+  # HiveServer2
+  # -----------------------------
+  hive-server: #
+    image: ramilu90/hive-server:1.0.0
+    container_name: hive-server
+    platform: linux/amd64
+#   volumes:
+#     - /home/iitgcpuser/iit/lab5/hadoop-hive-dockercompose/recharge2.input:/opt/recharge2.input
+    env_file:
+      - ./hadoop.env
+    environment: # Added for HDFS client stability
+      - HADOOP_USER_NAME=root
+    depends_on:
+      hive-metastore:
+        condition: service_started
+      namenode:
+        condition: service_healthy
+    command: /opt/hive/bin/hiveserver2
+    ports:
+      - "10000:10000"
+    networks:
+      - hadoop-net
+
+volumes:
+  metastore-db2:
+
+networks:
+  hadoop-net:
+    driver: bridge
