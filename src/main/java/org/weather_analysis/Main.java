@@ -12,29 +12,19 @@ import org.apache.hadoop.mapreduce.*;
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 
-/**
- * Main contains two MapReduce jobs:
- *  - Job1: aggregate per district × YYYY-MM → total_precip, mean_temp
- *  - Job2: find YYYY-MM with highest total_precip across island
- *
- * Usage (HDFS paths):
- *   hadoop jar weather-mr-1.0-SNAPSHOT-jar-with-dependencies.jar \
- *      org.example.weather.Main \
- *      /user/you/weather_input /user/you/locationData_cleaned.csv /user/you/job1_out /user/you/job2_out
- */
 public class Main {
 
     // --------------------------
     // --- Job 1: Mapper/Reducer
     // --------------------------
     public static class Job1Mapper extends Mapper<LongWritable, Text, Text, Text> {
+
         private Map<String,String> locMap = new HashMap<>();
         private boolean isHeaderSkipped = false;
         private SimpleDateFormat[] parsers;
 
         @Override
         protected void setup(Context context) throws IOException {
-            // date parsers to try
             parsers = new SimpleDateFormat[] {
                     new SimpleDateFormat("yyyy-MM-dd"),
                     new SimpleDateFormat("dd/MM/yyyy"),
@@ -42,32 +32,26 @@ public class Main {
                     new SimpleDateFormat("M/d/yyyy"),
                     new SimpleDateFormat("d/M/yyyy")
             };
-            // load cached file(s) (distributed cache)
             URI[] cacheFiles = context.getCacheFiles();
             if (cacheFiles != null) {
                 for (URI uri : cacheFiles) {
                     String name = (new Path(uri.getPath())).getName();
-                    // we expect locationData_cleaned.csv
-                    if (name.toLowerCase().contains("location")) {
+                    if (name.toLowerCase().contains("location")) { //lookup location data using locationData.csv
                         loadLocationLookup(new BufferedReader(new InputStreamReader(new FileInputStream(name), "UTF-8")));
                     }
                 }
             }
         }
 
+        // function to lookup location Id
         private void loadLocationLookup(BufferedReader r) throws IOException {
             String line;
             String header = r.readLine(); // assume header present
             while ((line = r.readLine()) != null) {
                 if (line.trim().isEmpty()) continue;
-                // simple CSV split (adjust if your file has commas in quotes)
                 String[] parts = line.split(",", -1);
-                // try to discover indices: location_id, district or city_name
-                // assume first column location_id, next lat/lon... city_name last
-                String locid = parts[0].trim();
-                String district = null;
-                // try find district column by name? we don't have header columns here
-                // fallback use last column as city_name/district
+                String locid = parts[0].trim(); //fetch locationId since first column is in location.csv contains the locationId
+                String district = null; // fallback to use district
                 district = parts[parts.length-1].trim();
                 if (district.isEmpty()) district = "UNKNOWN";
                 locMap.put(locid, district);
@@ -75,6 +59,7 @@ public class Main {
             r.close();
         }
 
+        // date parser function
         private Date tryParseDate(String s) {
             if (s == null) return null;
             s = s.trim();
@@ -91,37 +76,22 @@ public class Main {
         protected void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
             String line = value.toString().trim();
             if (line.length()==0) return;
-            // skip header heuristically if present
+            // skip header if present
             if (!isHeaderSkipped && (line.toLowerCase().contains("location_id") || line.toLowerCase().contains("date"))) {
                 isHeaderSkipped = true;
                 return;
             }
-            // extract CSV fields simply
+            // extract CSV fields
             String[] cols = line.split(",", -1);
-            // expected columns at least: location_id, date, precipitation_sum or precipitation_hours, temperature_2m_mean
-            // tolerant parsing: locate fields by matching header names is better, but for simplicity we assume standard order:
-            // 0: location_id, 1: date, ... find precip and temp by scanning headings if available (not implemented here)
             String locationId = cols.length>0 ? cols[0].trim() : "";
             String dateStr = cols.length>1 ? cols[1].trim() : "";
-            // find precipitation and temperature by scanning the line for keywords in header would be better,
-            // but we'll try common column index patterns:
-            // search for any numeric that resembles precip or temp by column name — simpler: try known names if header present
-            // For robust code, you may preprocess to supply indices via job config. Here we fallback:
             double precipVal = 0.0;
             Double tempVal = null;
             // Try to find columns by header is not implemented; try to detect by approximate column contents:
             for (int i=2;i<cols.length;i++) {
                 String c = cols[i].trim();
-                // if column name included in first line, we would need header mapping; here we use heuristic:
-                // if c contains ':' or time string or sunrise/sunset, skip
             }
-            // Heuristic below: assume precipitation_sum is the first numeric after sunshine_duration etc.
-            // Instead: attempt to parse named variants if present in the header line by reading the first line from the input file.
-            // Simpler approach for local use: expect CSV columns in the same order as your sample:
-            // location_id,date,weather_code,...,precipitation_sum (mm),rain_sum (mm),precipitation_hours (h),wind_speed_10m_max...
-            // From your sample precipitation_sum was near the 11th column, and temp_mean is at index 5 (0-based).
             try {
-                // temp_mean with index 5 (based on sample)
                 if (cols.length>5) {
                     tempVal = cols[5].isEmpty() ? null : Double.parseDouble(cols[5]);
                 }
@@ -129,9 +99,8 @@ public class Main {
                 tempVal = null;
             }
             try {
-                // precipitation_sum around index 11 (0-based). precipitation_hours around index 13
                 if (cols.length>13 && !cols[13].isEmpty()) {
-                    precipVal = Double.parseDouble(cols[13]); // precipitation_hours (h) if you prefer hours
+                    precipVal = Double.parseDouble(cols[13]); // precipitation_hours (h)
                 } else if (cols.length>11 && !cols[11].isEmpty()) {
                     precipVal = Double.parseDouble(cols[11]); // precipitation_sum (mm)
                 } else {
