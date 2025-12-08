@@ -42,13 +42,13 @@ public class Job1 {
                 else if (parts.length >= 14) {
                     String locationId = parts[0].trim();
                     String dateStr = parts[1].trim();
-                    String tempMeanStr = parts[5].trim();          // temperature_2m_mean
-                    String precipSumStr = parts[11].trim();        // precipitation_sum (mm)
+                    String tempMeanStr = parts[5].trim();       // temperature_2m_mean
+                    String precipHoursStr = parts[13].trim();   // precipitation_hours
 
                     if (locationId.isEmpty() || dateStr.isEmpty()) return;
 
                     context.write(new Text(locationId),
-                            new Text("W|" + dateStr + "|" + tempMeanStr + "|" + precipSumStr));
+                            new Text("W|" + dateStr + "|" + tempMeanStr + "|" + precipHoursStr));
                 }
 
             } catch (Exception e) {
@@ -74,7 +74,7 @@ public class Job1 {
                         cityName = v.substring(2);
                     } else if (v.startsWith("W|")) {
                         String[] p = v.split("\\|", -1);
-                        weatherRows.add(new String[]{p[0], p[1], p[2]}); // date, temp_mean, precip_sum
+                        weatherRows.add(new String[]{p[1], p[2], p[3]}); // date, temp_mean, precip_hours
                     }
                 }
 
@@ -88,7 +88,7 @@ public class Job1 {
                 for (String[] row : weatherRows) {
                     String dateStr = row[0];
                     double temp = parseDouble(row[1]);
-                    double precip = parseDouble(row[2]); // precipitation_sum now
+                    double precip = parseDouble(row[2]);
 
                     Date date = inputDateFormat.parse(dateStr);
                     Calendar cal = Calendar.getInstance();
