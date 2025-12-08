@@ -26,7 +26,7 @@ public class Job2 {
             if (line.isEmpty() || line.startsWith("location_id")) return;
 
             String[] c = line.split(",", -1);
-            if (c.length < 12) return;  // ensure precipitation_sum exists
+            if (c.length < 14) return;  // ensure precipitation_hours exists
 
             String date = c[1];  // "M/d/yyyy"
             String[] d = date.split("/");
@@ -34,17 +34,16 @@ public class Job2 {
 
             String month = d[0].length() == 1 ? "0" + d[0] : d[0];
             String year = d[2];
-
             String yearMonth = year + "-" + month;
 
-            double precip = 0.0;
+            double precipHours = 0.0;
             try {
-                precip = Double.parseDouble(c[11]); // precipitation_sum (mm)
+                precipHours = Double.parseDouble(c[13]); // precipitation_hours (h)
             } catch (Exception e) {
                 return;
             }
 
-            ctx.write(new Text(yearMonth), new DoubleWritable(precip));
+            ctx.write(new Text(yearMonth), new DoubleWritable(precipHours));
         }
     }
 
@@ -80,12 +79,12 @@ public class Job2 {
     public static void main(String[] args) throws Exception {
 
         if (args.length < 4) {
-            System.err.println("Usage: Main <weather_in> <location_csv> <job1_out> <job2_out>");
+            System.err.println("Usage: Job2 <weather_csv> <location_csv> <job1_out> <job2_out>");
             System.exit(1);
         }
 
         Configuration conf = new Configuration();
-        Job job2 = Job.getInstance(conf, "max-precip-month");
+        Job job2 = Job.getInstance(conf, "max-precip-hours-month");
         job2.setJarByClass(Job2.class);
 
         job2.setMapperClass(Job2Mapper.class);
@@ -99,7 +98,7 @@ public class Job2 {
 
         job2.setNumReduceTasks(1);
 
-        TextInputFormat.addInputPath(job2, new Path(args[0]));
+        TextInputFormat.addInputPath(job2, new Path(args[0]));  // weatherData.csv
         TextOutputFormat.setOutputPath(job2, new Path(args[3]));
 
         job2.waitForCompletion(true);
