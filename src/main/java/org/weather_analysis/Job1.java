@@ -17,8 +17,6 @@ public class Job1 {
 
     public static class Job1Mapper extends Mapper<LongWritable, Text, Text, Text> {
 
-        private SimpleDateFormat inputDateFormat = new SimpleDateFormat("M/d/yyyy");
-
         @Override
         protected void map(LongWritable key, Text value, Context context) {
             try {
@@ -52,6 +50,7 @@ public class Job1 {
                 }
 
             } catch (Exception e) {
+                System.out.println("Exception occurred : " + e);
                 e.printStackTrace();
             }
         }
@@ -109,6 +108,7 @@ public class Job1 {
                 }
 
             } catch (Exception e) {
+                System.out.println("Exception occurred : " + e);
                 e.printStackTrace();
             }
         }

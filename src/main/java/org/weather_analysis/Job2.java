@@ -26,7 +26,6 @@ public class Job2 {
             if (line.isEmpty() || line.startsWith("location_id")) return;
 
             String[] c = line.split(",", -1);
-            if (c.length < 14) return;  // ensure precipitation_hours exists
 
             String date = c[1];  // "M/d/yyyy"
             String[] d = date.split("/");
@@ -40,6 +39,8 @@ public class Job2 {
             try {
                 precipHours = Double.parseDouble(c[13]); // precipitation_hours (h)
             } catch (Exception e) {
+                System.out.println("Exception occurred : " + e);
+                e.printStackTrace();
                 return;
             }
 
